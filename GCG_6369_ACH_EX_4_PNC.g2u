@@ -1,0 +1,203 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.Form..Create(BaseForm)
+Gui.Form..Caption("ACH for PNC")
+Gui.Form..Size(338,123)
+Gui.Form..MinX(0)
+Gui.Form..MinY(0)
+Gui.Form..Position(0,0)
+Gui.Form..AlwaysOnTop(False)
+Gui.Form..FontName("Tahoma")
+Gui.Form..FontSize(8.25)
+Gui.Form..ControlBox(True)
+Gui.Form..MaxButton(True)
+Gui.Form..MinButton(True)
+Gui.Form..MousePointer(0)
+Gui.Form..Moveable(True)
+Gui.Form..Sizeable(True)
+Gui.Form..ShowInTaskBar(True)
+Gui.Form..TitleBar(True)
+Gui.Form..Event(UnLoad,Unload)
+Gui.Form.cmdExport.Create(Button)
+Gui.Form.cmdExport.Enabled(True)
+Gui.Form.cmdExport.Visible(True)
+Gui.Form.cmdExport.Zorder(0)
+Gui.Form.cmdExport.Size(75,23)
+Gui.Form.cmdExport.Position(245,61)
+Gui.Form.cmdExport.Caption("Export")
+Gui.Form.cmdExport.FontName("Tahoma")
+Gui.Form.cmdExport.FontSize(8.25)
+Gui.Form.cmdExport.Event(Click,ProcessData)
+Gui.Form.dtpTransDate.Create(DatePicker)
+Gui.Form.dtpTransDate.Enabled(True)
+Gui.Form.dtpTransDate.Visible(True)
+Gui.Form.dtpTransDate.Zorder(0)
+Gui.Form.dtpTransDate.Size(156,20)
+Gui.Form.dtpTransDate.Position(22,33)
+Gui.Form.dtpTransDate.CheckBox(False)
+Gui.Form.dtpTransDate.FontName("Tahoma")
+Gui.Form.dtpTransDate.FontSize(8.25)
+Gui.Form.lbl1.Create(Label,"Select Export Date",True,90,13,0,29,12,True,0,"Tahoma",8.25,,0,0)
+Gui.Form.lbl1.BorderStyle(0)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+
+'Developer: FEQ (Sisco)
+'Customer: Monti
+'Date: 5/28/2021
+'This is an ACH export for Monti. This is for PNC bank.
+'The user will select a date to pull info from, and the script will pull info from table V_ACH_PAYMENT.
+'The export will be posted in \\rdpserver2\prints\A5 - Accounting\Accounts Payable\PNC - ACH\CSV files\MontiACHYYYYMMDD.csv
+'The columns exported are as follows:
+'ACC # -------------------------- BANK_ACCOUNT
+'ABA ---------------------------- BANK_ROUTING
+'Account Type ------------------- BANK_ACCTYPE
+'Check Amount ------------------- CHECK_AMT
+'Check Date --------------------- CHECK_DATE
+'Payee -------------------------- VENDOR_NAME
+'Payee ID ----------------------- VENDOR_ID
+
+F.Intrinsic.Control.Try
+
+Gui.Form..Show
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.Error.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+
+F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Caller.ScriptFile, V.Ambient.Newline, V.Args.Subroutine, V.Args.ErrorNo, V.Args.ErrorDesc, V.Ambient.GABVersion, V.Local.sError)
+
+F.Intrinsic.UI.Msgbox(V.Local.sError, "CRITICAL ERROR")
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.Exitsub
+F.Intrinsic.Control.EndTry
+Program.Sub.Error.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.Try
+
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.End
+F.Intrinsic.Control.EndTry
+Program.Sub.Unload.End
+
+Program.Sub.ProcessData.Start
+F.Intrinsic.Control.Try
+V.Local.sError.Declare(String, "")
+V.Local.sSql.Declare(String, "")
+V.Local.sFileName.Declare(String, "")
+V.Local.sFileLocation.Declare(String, "")
+V.Local.sMessage.Declare(String, "")
+V.Local.sContents.Declare(String, "")
+V.Local.sEncodedBank.Declare(String, "")
+V.Local.sDecodedBank.Declare(String, "")
+V.Local.sDateTemp.Declare(String, "")
+V.Local.iLoop.Declare(Long, 0)
+V.Local.Encoded.Declare(ByteArray)
+V.Local.dSelectedDate.Declare(Date, "01/01/1900")
+V.Local.sVendor.Declare
+
+Gui.Form..Visible(False)
+
+'All we do is capture the date and append it to the query. Load data into the table and export the table into the CSV
+V.Local.dSelectedDate.Set(V.Screen.Form!dtpTransDate.Value)
+
+'ACC # -------------------------- BANK_ACCOUNT
+'ABA ---------------------------- BANK_ROUTING
+'Account Type ------------------- BANK_ACCTYPE
+'Check Amount ------------------- CHECK_AMT
+'Check Date --------------------- CHECK_DATE
+'Payee -------------------------- VENDOR_NAME
+'Payee ID ----------------------- VENDOR_ID
+
+'This is coded for a version of GSS before the BANK_ACCOUNT number was encrypted and uses the field BANK_ACCOUNT instead of BANK_ACCOUNT_ENC
+'When they update, we will need to add code to decrypt the value of that field
+'F.Intrinsic.String.Build("Select BANK_ACCOUNT, BANK_ROUTING, IF(BANK_ACCTYPE = 'C', 'Checking', IF(BANK_ACCTYPE='S','Savings','---')) AS BANK_ACCTYPE, CHECK_AMT, CHECK_DATE, REPLACE(LTRIM(RTRIM(LEFT(VENDOR_NAME,22))),',',' ') as VENDOR_NAME, LEFT(VENDOR_ID,15) as VENDOR_ID from V_ACH_PAYMENT where CHECK_DATE = '{0}' ORDER BY CHECK_DATE, VENDOR_NAME, VENDOR_ID", V.Local.dSelectedDate.PervasiveDate, V.Local.sSql)
+
+
+'This is for 2019.1 and up --------------------------------------------------------------------------------------
+F.Intrinsic.String.Build("Select BANK_ACCOUNT_ENC, RTRIM(LTRIM(BANK_ROUTING)) as BANK_ROUTING, IF(BANK_ACCTYPE = 'C', 'Checking', IF(BANK_ACCTYPE='S','Savings','---')) AS BANK_ACCTYPE, RTRIM(LTRIM(CHECK_AMT)) as CHECK_AMT, CHECK_DATE as CHECK_DATE_RAW, REPLACE(LTRIM(RTRIM(LEFT(VENDOR_NAME,22))),',',' ') as VENDOR_NAME, RTRIM(LTRIM(LEFT(VENDOR_ID,15))) as VENDOR_ID from V_ACH_PAYMENT where CHECK_DATE = '{0}' ORDER BY CHECK_DATE, VENDOR_NAME, VENDOR_ID", V.Local.dSelectedDate.PervasiveDate, V.Local.sSql)
+'----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+F.ODBC.Connection!conx.OpenCompanyConnection
+
+F.Data.Datatable.CreateFromSQL("dtACHData", "conx", V.Local.sSql, True)
+
+F.ODBC.Connection!conx.Close
+
+F.Intrinsic.Control.If(V.DataTable.dtACHData.RowCount, =, 0)
+	F.Intrinsic.String.Build("NO ACH data was found for date {0}", V.Local.dSelectedDate, V.Local.sFileName)
+	F.Intrinsic.UI.Msgbox(V.Local.sFileName, "NO DATA")
+	F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndIf
+
+F.Data.Datatable.AddColumn("dtACHData", "BANK_ACCOUNT", "String")
+F.Data.Datatable.AddColumn("dtACHData", "CHECK_DATE", "String")
+
+'We need to decrypt the value coming in from teh data in the table
+F.Intrinsic.Control.For(V.Local.iLoop, 0, V.DataTable.dtACHData.RowCount--, 1)
+V.Local.sVendor.Set(V.DataTable.dtACHData(V.Local.iLoop).Vendor_ID!FieldVal)
+	
+	F.Intrinsic.String.Format(V.DataTable.dtACHData(V.Local.iLoop).CHECK_DATE_RAW!FieldVal, "MM/DD/YYYY", V.Local.sDateTemp)
+	
+    F.Global.Encryption.Decrypt(V.DataTable.dtACHData(V.Local.iLoop).BANK_ACCOUNT_ENC!FieldVal,V.Local.sDecodedBank)
+	
+	F.Data.Datatable.SetValue("dtACHData", V.Local.iLoop, "BANK_ACCOUNT", V.Local.sDecodedBank.Trim, "CHECK_DATE", V.Local.sDateTemp)
+	
+F.Intrinsic.Control.Next(V.Local.iLoop)
+
+
+'The date field is giving us issues, as usual (printing the 0:00 time..) so here is a lovely workaround
+F.Data.DataView.Create("dtACHData", "dv4Prints", 22)
+
+F.Data.DataView.ToString("dtACHData", "dv4Prints", "BANK_ACCOUNT*!*BANK_ROUTING*!*BANK_ACCTYPE*!*CHECK_AMT*!*CHECK_DATE*!*VENDOR_NAME*!*VENDOR_ID", "*!*", "@!@", V.Local.sContents)
+F.Intrinsic.String.Replace(V.Local.sContents, "12:00:00 AM", "", V.Local.sContents)
+
+F.Data.Datatable.CreateFromString("dtExport", V.Local.sContents, "BANK_ACCOUNT*!*BANK_ROUTING*!*BANK_ACCTYPE*!*CHECK_AMT*!*CHECK_DATE*!*VENDOR_NAME*!*VENDOR_ID", "String*!*String*!*String*!*String*!*String*!*String*!*String", "*!*", "@!@", True)
+
+'Make the file name 
+F.Intrinsic.String.Format(V.Ambient.Now, "YYYY-MM-DD,HH-NN", V.Local.sDateTemp)
+F.Intrinsic.String.Replace(V.Local.sDateTemp, "-", "", V.Local.sDateTemp)
+F.Intrinsic.String.Replace(V.Local.sDateTemp, ",", "_", V.Local.sDateTemp)
+F.Intrinsic.String.Build("MONTIACH{0}.csv", V.Local.sDateTemp, V.Local.sFileName)
+F.Intrinsic.String.Build("\\rdpserver2\prints\A5 - Accounting\Accounts Payable\PNC - ACH\CSV files\{0}", V.Local.sFileName, V.Local.sFileLocation)
+
+
+'TEST ---------------------------------
+'F.Intrinsic.String.Build("{0}\Custom\6369\{1}", V.Caller.GlobalDir, V.Local.sFileName, V.Local.sFileLocation)
+'--------------------------------------
+
+F.Data.DataTable.SaveToCSV("dtExport", V.Local.sFileLocation, False)
+
+F.Intrinsic.String.Build("Data has been exported to{0}{0}{1}", V.Ambient.NewLine, V.Local.sFileLocation, V.Local.sMessage)
+F.Intrinsic.UI.Msgbox(V.Local.sMessage, "EXPORT SUCCESS")
+
+F.Data.Datatable.Close("dtExport")
+F.Data.DataView.Close("dtACHData", "dv4Prints")
+F.Data.Datatable.Close("dtACHData")
+
+F.Intrinsic.Control.Catch
+F.Intrinsic.Control.CallSub(Error, "Subroutine", V.Ambient.CurrentSubroutine, "ErrorDesc", V.Ambient.ErrorDescription, "ErrorNo", V.Ambient.ErrorNumber)
+F.Intrinsic.Control.CallSub(Unload)
+F.Intrinsic.Control.EndTry
+Program.Sub.ProcessData.End
+
+Program.Sub.Comments.Start
+${$5$}$2.2020.1.105$}$1
+${$6$}$triley$}$20220504151626370$}$iK6nerqp9nur1h1iSBfRKBBz1ENCgYv6X6CsgTl5ML6MhvYjyfvsbxCqHvbf9tu2kpy7tp4s5ag=
+Program.Sub.Comments.End
